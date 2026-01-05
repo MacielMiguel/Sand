@@ -1,0 +1,66 @@
+function writeMotors(port_num, PROTOCOL_VERSION, DXL_IDS, ADDR_GOAL_POSITION, ADDR_PRESENT_POSITION, q_initial, tau)
+% writeSensors
+%   writeSensors(port_num, PROTOCOL_VERSION, DXL_IDS, ADDR_GOAL_POSITION, q_final)
+%
+%   - port_num            : gate handler (returned by portHandler)
+%   - PROTOCOL_VERSION    : (ex.: 1.0 or 2.0)
+%   - DXL_IDS             : array with motors IDs (ex.: [1 2 3])
+%   - ADDR_GOAL_POSITION  : register's address for Goal Position (AX-12: 30)
+%   - q_final             : array with the goal positions
+%                           
+    COMM_SUCCESS                = 0;            % Communication Success result value
+    
+    nMotors = numel(DXL_IDS);
+    K_theta = 28;          % Gain torque/angle
+    % dq_max = deg2rad(2);   % Max angle change per iteration
+    q_min = -deg2rad(150);
+    q_max = deg2rad(150);
+    q1_pos = 0;
+
+    for k = 1:nMotors
+        id    = DXL_IDS(k);
+        %dq = max(-dq_max, min(dq_max, tau(k) / K_theta));
+        dq = tau(k) / K_theta;
+        q_final = max(q_min, min(q_max, q_initial(k) + dq));
+        q_final = round(((q_final + deg2rad(150)) / deg2rad(300)) * 1023);
+        q_final = max(0, min(1023, q_final));
+
+        % Checks motors 3 position based on experimental limits from 1
+        if id == 2
+            q1_pos = q_final;
+        elseif id == 3
+            min_q2 = round(-0.1021*q1_pos + 432.76);
+            max_q2 = round(-0.2607*q1_pos + 680.49);
+            q_final = max(min_q2, min(max_q2, q_final)); % limits the values of q2
+        end
+
+        %it = 0;
+        %error_q = inf;
+        % Writes the positions in the motors
+        %while (abs(error_q) > 10) %&& (it < 3)
+        write2ByteTxRx(port_num, PROTOCOL_VERSION, id, ADDR_GOAL_POSITION, q_final);
+        dxl_comm_result = getLastTxRxResult(port_num, PROTOCOL_VERSION);
+        dxl_error = getLastRxPacketError(port_num, PROTOCOL_VERSION);
+        if dxl_comm_result ~= COMM_SUCCESS
+            fprintf('%s\n', getTxRxResult(PROTOCOL_VERSION, dxl_comm_result));
+        elseif dxl_error ~= 0
+            fprintf('%s\n', getRxPacketError(PROTOCOL_VERSION, dxl_error));
+        end
+            
+            %q_read = read2ByteTxRx(port_num, PROTOCOL_VERSION, id, ADDR_PRESENT_POSITION);
+            %error_q = q_read - q_final;
+            %it = it + 1;
+        %end
+
+        % Checking communication errors 
+        dxl_comm_result = getLastTxRxResult(port_num, PROTOCOL_VERSION);
+        dxl_error       = getLastRxPacketError(port_num, PROTOCOL_VERSION);
+        if dxl_comm_result ~= 0
+            fprintf('[writeSensors] Communication error with motor ID  %d: %s\n', ...
+                id, getTxRxResult(PROTOCOL_VERSION, dxl_comm_result));
+        elseif dxl_error ~= 0
+            fprintf('[writeSensors] Packet error with motor ID %d: %s\n', ...
+                id, getRxPacketError(PROTOCOL_VERSION, dxl_error));
+        end
+    end
+end

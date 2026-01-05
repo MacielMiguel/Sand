@@ -1,0 +1,57 @@
+clc; close all;
+
+% Geometria
+L1 = 0.04; L2 = 0.10; L3 = 0.10;
+
+% Limites articulares (coloque os reais do seu sistema)
+th1 = linspace(-0.24,  0.2, 40); % [460, 545] => offset = 0.22
+th2 = linspace(-2.55,  -1.06, 40); % [10, 300] => offset = 1.805
+th3 = linspace(-0.65,  0.47, 40); % [380, 600] => offset = 0.56
+
+XYZ = zeros(3, numel(th1)*numel(th2)*numel(th3));
+idx = 1;
+
+for t1 = th1
+  for t2 = th2
+    for t3 = th3
+        q = [t1; t2; t3];
+        chi = FK_local(q, L1, L2, L3);
+        XYZ(:,idx) = chi;
+        idx = idx + 1;
+    end
+  end
+end
+
+scatter3(XYZ(1,:), XYZ(2,:), XYZ(3,:), 3, '.');
+axis equal; grid on;
+xlabel('X'); ylabel('Y'); zlabel('Z');
+title('Workspace (amostragem articular)');
+
+% -----------------------
+function chi = FK_local(q, L1, L2, L3)
+theta1 = q(1); theta2 = q(2); theta3 = q(3);
+
+m = sqrt( (sin(theta3)^2) * (L3^2) + (cos(theta3)*L3 + L2)^2 );
+h = sqrt( L1^2 + m^2 );
+x = sin( pi/2 - atan(m/L1) - theta1 ) * h;
+y = cos( pi/2 - atan(m/L1) - theta1 ) * h;
+z = sin( pi - theta2 - atan( (sin(theta3)*L3) / (L2 + cos(theta3)*L3) ) ) * m;
+
+chi = [x; y; z];
+end
+
+function chi = FK_bidi(q, L1, L2, L3)
+theta1 = q(1); theta2 = q(2); theta3 = q(3);
+
+x = 0.042;
+m = sqrt(L2^2 + L3^2 + 2*L2*L3*cos(theta3)); 
+y = sqrt(L1^2 + m^2 - x^2);
+
+alpha = atan2(L3*sin(theta3), (L2 + L3*cos(theta3)));   % use atan2 (mais robusto)
+phi   = pi - theta2 - alpha;
+z = m * sin(phi);
+
+chi = [y; z];
+
+end
+
